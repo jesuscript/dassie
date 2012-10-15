@@ -8,18 +8,21 @@ dassie.controllers = {};
 
 (function($){
   // TODO: build in route support
-  dassie.Model = function(data){
+  dassie.Model = function(){
     this._data = {};
-    this._$o = $(); // empty jQuery object to use for event emitting
-    this.setData(data);
+    this._$o = $("<div>"); // empty jQuery object to use for event emitting
     this.construct.apply(this,arguments);
   }
   $.extend(dassie.Model.prototype,{
-    bind: function(){
-      this._$o.bind(arguments);
+    bind: function(event, callback){
+      this._$o.bind(event,callback);
     },
-    trigger: function(){
-      this._$o.trigger(arguments);
+    trigger: function(event, data){
+      this._$o.trigger(event, data);
+    },
+    clear: function(){
+      this._data = {};
+      this.trigger("clear",this._data);
     },
     setData: function(data){
       if(typeof data === "object"){
@@ -28,8 +31,9 @@ dassie.controllers = {};
             this._data[prop] = data[prop];
           }
         }
-        this.trigger("setData");
       }
+
+      this.trigger("setData",data);
     },
 
     getData: function(opt){
@@ -66,10 +70,12 @@ dassie.controllers = {};
       for(prop in this.preload){
         if(this.preload.hasOwnProperty(prop)){
           (function(p){
-            // callback for preloaded properties:
-            this.preload[prop](function(res){
-              this[p] = res;
-              onReady.apply(this,arguments); // constructs if done preloading
+            var loading_model = this.preload[p]();
+
+            //callback, for when it's loaded:
+            loading_model.bind("setData",function(){
+              this[p] = loading_model;
+              onReady.apply(this,arguments); 
             }.bind(this));
           }).call(this,prop);
         }
@@ -94,7 +100,7 @@ dassie.controllers = {};
 
   dassie.View = function(opt){
     this.$el = opt.$el;
-    this._$o = $();
+    this._$o = $(""); // empty jQuery object to use for event emitting
     this.construct.apply(this,arguments);
   }
 
