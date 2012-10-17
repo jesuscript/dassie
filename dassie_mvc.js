@@ -28,9 +28,13 @@ dassie.controllers = {};
     }
   };
 
-  dassie.Model = function(){
+  dassie.Model = function(data){
     this.initEventEmitter();
-    this._data = {};
+    if(typeof data === "object"){
+      this._data = data;
+    }else{
+      this._data = {};
+    }
     this.construct.apply(this,arguments);
   }
   $.extend(
@@ -83,46 +87,8 @@ dassie.controllers = {};
     });
 
 
-  //REFACTOR
   dassie.Controller = function(){
-    if(typeof this.preload === 'object' && !$.isEmptyObject(this.preload)){
-      // asynchronous preloading:
-      for(prop in this.preload){
-        if(this.preload.hasOwnProperty(prop)){
-          var loaded = false; //makes sure that onReady would be called only once
-
-          (function(p){
-            var loading_model = this.preload[p]();
-
-            //callback, for when it's loaded:
-            loading_model.bind("setData",function(){
-              this[p] = loading_model;
-              if(!loaded){
-                loaded = onReady.apply(this,arguments); 
-              }
-            }.bind(this));
-          }).call(this,prop);
-        }
-      }
-    }else{
-      onReady.apply(this,arguments);
-    }
-  }
-
-  function onReady(){
-    if(typeof this.preload === "object"){
-      //check if we preloaded everything we wanted to
-      for(prop in this.preload){
-
-        if(this.preload.hasOwnProperty(prop) && !this.hasOwnProperty(prop)){
-          return false;
-        }
-      }
-      this.preload = undefined;
-    }
-
     this.construct.apply(this,arguments);
-    return true;
   }
 
   dassie.View = function(opts){
