@@ -1,7 +1,8 @@
 // why dassie? cuz they're soooo cute!!! ^_^
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
-//TODO (maybe): delegate binding on collections of views (collections of views? o_O )
+//TODO: delegate events
+//TODO: think about how to load all locales from the server (not in this file tho)
 
 dassie = {};
 dassie.views = {};
@@ -33,9 +34,9 @@ dassie.controllers = {};
   dassie.Model = function(data){
     this.initEventEmitter();
     if(typeof data === "object"){
-      this._data = data;
+      this.data = data;
     }else{
-      this._data = {};
+      this.data = {};
     }
 
     if(this.construct !== undefined) this.construct.apply(this,arguments);
@@ -45,14 +46,14 @@ dassie.controllers = {};
     eventEmitter,
     {
       clear: function(){
-        this._data = {};
-        this.trigger("clear",this._data);
+        this.data = {};
+        this.trigger("clear",this.data);
       },
       setData: function(data){
         if(typeof data === "object"){
           for(prop in data){
             if(data.hasOwnProperty(prop)){
-              this._data[prop] = data[prop];
+              this.data[prop] = data[prop];
             }
           }
         }
@@ -61,10 +62,10 @@ dassie.controllers = {};
       },
 
       getData: function(opt){
-        if(typeof opt === "undefined") return this._data;
+        if(typeof opt === "undefined") return this.data;
 
         if(typeof opt === "string"){
-          return this._data[opt]
+          return this.data[opt]
         }
 
         if(typeof opt === "object"){
@@ -72,7 +73,7 @@ dassie.controllers = {};
             var data_subset = {};
             
             for(i=0,l=opt.length;i<l;i++){
-              data_subset[opt[i]] = this._data[opt[i]];
+              data_subset[opt[i]] = this.data[opt[i]];
             }
             return data_subset;
           }
