@@ -2,7 +2,6 @@
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
 //TODO: delegate events (e.g. view collections?);
-//TODO: think about how to load all locales from the server (not in this file tho)
 
 dassie = {};
 dassie.views = {};
@@ -99,7 +98,7 @@ dassie.controllers = {};
           }
         }
 
-        this.trigger("setData",data);
+        this.trigger("update",data);
       },
 
       getData: function(opt){
@@ -123,14 +122,13 @@ dassie.controllers = {};
       /* Sends a request to update the server-side representation of the model 
        * and load model's properties to update the object's data
        */
-
+      // asynchronous synchronisation lol
       sync: function(data,callback){ 
         if(typeof this.syncPath !== "function"){
           throw new Error("sync():"+ typeof this.syncPath +"is not a function!");
         }
         var self = this;
         
-        // asynchronous synchroniser lol
         ajax_helpers._put(this.syncPath(), data, function(response){
           $.extend(self.data,response);
 
