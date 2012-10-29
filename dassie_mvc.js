@@ -2,11 +2,13 @@
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
 //TODO: delegate events (e.g. view collections?);
+//TODO: Model and Collection make data completely private
 
 dassie = {};
 dassie.views = {};
 dassie.models = {};
 dassie.controllers = {};
+dassie.collections = {};
 
 (function($){
   var global = this;
@@ -23,60 +25,59 @@ dassie.controllers = {};
     },
     trigger: function(event,data){
       if(this._eH[event] !== undefined){
-        for(i=0, l = this._eH[event].length; i < l; i++){
+        for(var i=0, l = this._eH[event].length; i < l; i++){
           this._eH[event][i](data);
         }
       }
+    },
+    unbindAll: function(){
+      this._eH = {};
     }
   };
 
   var ajax_helpers = {
     //TODO: add error callbacks too?
-    _get: function(){
-      var args = getAjaxArguments(arguments);
-
+    _get: function(url,data,callback){
       $.ajax({
         type: "GET",
-        url: args.url,
-        data: $.extend({format: "json", _method: "GET"}, args.data),
-        success: args.callback
+        url: url,
+        data: $.extend({format: "json", _method: "GET"}, data),
+        success: callback
       });
     },
-    _post: function(){
-      var args = getAjaxArguments(arguments);
+    _post: function(url,data,callback){
       $.ajax({
         type: "POST",
-        url: args.url,
-        data: $.extend({format: "json", _method: "POST"}, args.data),
-        success: args.callback
+        url: url,
+        data: $.extend({format: "json", _method: "POST"}, data),
+        success: callback
       });
     },
-    _put: function(){
-      var args = getAjaxArguments(arguments);
+    _put: function(url,data,callback){
       $.ajax({
         type: "POST",
-        url: args.url,
-        data: $.extend({format: "json", _method: "PUT"}, args.data),
-        success: args.callback
+        url: url,
+        data: $.extend({format: "json", _method: "PUT"}, data),
+        success: callback
       });
     },
-    _delete: function(){
-      var args = getAjaxArguments(arguments);
+    _delete: function(url,data,callback){
       $.ajax({
         type: "POST",
-        url: args.url,
-        data: $.extend({format: "json", _method: "DELETE"}, args.data),
-        success: args.callback
+        url: url,
+        data: $.extend({format: "json", _method: "DELETE"}, data),
+        success: callback
       });
     }
   }
-
+  // TODO: make data _completely_ private and add .get() and .set() methods
   dassie.Model = function(data){
     this.initEventEmitter();
+
+    this.data = {};
+
     if(typeof data === "object"){
-      this.data = data;
-    }else{
-      this.data = {};
+      this.setData(data);
     }
 
     if(this.construct !== undefined) this.construct.apply(this,arguments);
@@ -85,92 +86,74 @@ dassie.controllers = {};
     dassie.Model.prototype,
     eventEmitter,
     {
-      clear: function(){
-        this.data = {};
-        this.trigger("clear",this.data);
+      set: function(key, value){
+        this.data[key] = value;
+      },
+      get: function(key){
+        return this.data[key];
       },
       setData: function(data){
-        if(typeof data === "object"){
-          for(prop in data){
-            if(data.hasOwnProperty(prop)){
-              this.data[prop] = data[prop];
-            }
-          }
+        if(typeof data !== "object"){
+          throw new Error("setData(): " + data + " is not an object!");
         }
-
+        $.extend(this.data, data);
+        
         this.trigger("update",data);
       },
-
-      getData: function(opt){
-        if(typeof opt === "undefined") return this.data;
-
-        if(typeof opt === "string"){
-          return this.data[opt]
-        }
-
-        if(typeof opt === "object"){
-          if(opt instanceof Array){
-            var data_subset = {};
-            
-            for(i=0,l=opt.length;i<l;i++){
-              data_subset[opt[i]] = this.data[opt[i]];
-            }
-            return data_subset;
-          }
-        }
+      replaceData: function(data){
+        this.data = {};
+        this.setData(data);
       },
+      destroy: function(){
+        this.trigger("destroy");
+        for(prop in this)  if(this.hasOwnProperty(prop))  delete this[prop];
+        delete this;
+      },
+
       /* Sends a request to update the server-side representation of the model 
        * and load model's properties to update the object's data
+       * Default Rails action: #update
        */
       // asynchronous synchronisation lol
-      sync: function(data,callback){ 
-        if(typeof this.syncPath !== "function"){
-          throw new Error("sync():"+ typeof this.syncPath +"is not a function!");
-        }
+      save: function(){ 
         var self = this;
+        var args = getAjaxArguments.call(this,arguments);
+
+        ajax_helpers._put(this.savePath !== undefined ? this.savePath() : this.path(),
+                          args.data,
+                         function(response){
+                           if(typeof args.callback === "function") args.callback(response);
+                         });
+      },
+      /* Sends a request to receive new data and update the object's properties.
+       * Default Rails action: #show
+       */
+      load: function(){ 
+        var self = this;
+        var args = getAjaxArguments.call(this,arguments);
         
-        ajax_helpers._put(this.syncPath(), data, function(response){
-          $.extend(self.data,response);
-
-          self.trigger("update");
-          if(typeof callback === "function") callback(response);
-        });
+        ajax_helpers._get(this.loadPath !== undefined ? this.loadPath() : this.path(), 
+                          args.data, 
+                          function(response){
+                            self.setData(response);
+                            if(typeof args.callback === "function") args.callback(response);
+                          });
       },
-      /* works just like sync but wipes object's data before adding received properties to it*/
-      clean_sync: function(data,callback){
-        if(typeof this.syncPath !== "function"){
-          throw new Error("clean_sync(): "+ typeof this.syncPath +" is not a function!");
-        }
-        var self = this;
-        ajax_helpers._put(this.syncPath(), data, function(response){
-          delete self.data;
-          self.data = response;
-
-          self.trigger("update");
-          if(typeof callback === "function") callback(response);
-        });
+      /* lower-level synchronisation function. it's preferable to use sync and load instead 
+       * of this one*/
+      request: function(path,data,callback, set_data){
       },
-      /* Sends a request to get the model's properties, and updates the object's data */
-      load: function(data,callback){
-        var self = this;
-        if(typeof this.loadPath !== "function"){
-          throw new Error("load():" + typeof this.loadPath + " is not a function!");
-        }
-        ajax_helpers._get(this.loadPath(), data, function(response){
-          $.extend(self.data,response);
 
-          self.trigger("update");
-          if(typeof callback === "function") callback(response);
-        });
-      },
-      //TODO(maybe): reload() to wipe object's data and load it
-
-      /* Sends a request to create a new server-side representation of the model */
+      /* Sends a request to create a new server-side representation of the model 
+       * Rails action: #create
+       */
       saveNew: function(data,callback){
         //TODO
       },
-      /* Sends a request to destroy the server-side representation of the model */
-      destroy: function(data,callback){
+      /* Sends a request to delete the server-side representation of the model 
+       * Rails action: #delete
+       */
+      delete: function(data,callback){
         //TODO
       }
     }
@@ -178,28 +161,139 @@ dassie.controllers = {};
   //static methods:
   $.extend(dassie.Model, ajax_helpers);
 
-  function getAjaxArguments(args){
-    var url, data, callback;
-    url = args[0];
-
-    if(args.length == 2 && args[1] !== undefined){
-      if(typeof args[1] === "object"){
-        data = args[1];
-      }else if(typeof args[1] === "function"){
-        callback = args[1]
-      }else{
-        throw new Error("getAjaxArguments(): 2nd argument must be an object or a function");
-      }
-    }else{
-      if(args[1] !== undefined && typeof args[1] !== "object"){
-        throw new Error("getAjaxArguments(): 2nd argument must be an object or undefined");
-      }
-      if(args[2] !== undefined && typeof args[2] !== "function"){
-        throw new Error("getAjaxArguments(): 3rd argument must be a function or undefined");
-      }
-      data = args[1];
-      callback = args[2];
+  dassie.Collection = function(){
+    if(typeof this.models !== "object"){
+      throw new Error("Collection(): " + this.models + " is not an object!");
     }
+
+    this.initEventEmitter();
+
+    for(model in this.models){
+      if(this.models.hasOwnProperty(model)){
+        this[model] = $.extend({}, eventEmitter, modelFunctions);
+        this[model].initEventEmitter();
+
+        this[model].type = this.models[model]; // TODO: private
+        this[model].objects = {}; //TODO: private
+      }
+    }
+    delete this.models;
+
+    if(this.construct !== undefined) this.construct.apply(this,arguments);
+  }
+
+  var modelFunctions = {
+    add: function(obj){
+      if(obj.get("id") === undefined) {
+        throw new Error("Object passed as an argument must have an id property");
+      }
+
+      if(obj instanceof this.type){
+        this.objects[obj.get("id")] = obj;
+      }else{
+        this.objects[obj.get("id")] = new this.type(obj);
+      }
+      this.trigger("added", this.objects[obj.get("id")]);
+    },
+    remove: function(obj){
+      if(obj.get("id") === undefined) {
+        throw new Error("Object passed as an argument must have an id property");
+      }
+
+      delete this.objects[obj.get("id")];
+      
+      this.trigger("removed", obj);
+    },
+    asArray: function(){
+      var result = [];
+
+      for(p in this.objects){
+        if(this.objects.hasOwnProperty(p)){
+          result.push(this.objects[p]);
+        }
+      }
+      return result;
+    },
+    is_model: true
+  }
+
+  // TODO: make models and data _completely_ private
+  $.extend(
+    dassie.Collection.prototype,
+    eventEmitter,
+    {
+      /* Sends a request to get the model objects, updates the currently existing ones,
+         creates new ones and cleans up the no longer existing models*/
+      pull: function(){ 
+        var args = getAjaxArguments.call(this,arguments)
+
+        if(typeof this.path !== "function"){
+          throw new Error("pull(): "+ typeof this.path +" is not a function!");
+        }
+        var self = this;
+        
+        ajax_helpers._get(this.path(), args.data, function(response){
+
+          for(prop in response){
+            if(response.hasOwnProperty(prop) && self[prop] !== undefined &&
+               self[prop].is_model){
+
+              parseJSONObjectsAsModelObjects.call(self,response[prop], self[prop]);
+            }
+          }
+
+          self.trigger("pull");
+          if(typeof args.callback === "function") args.callback(this);
+        });
+      }
+    }
+  );
+
+  function parseJSONObjectsAsModelObjects(JSON, model_ref){
+    var parsed_ids = {};
+    
+    for(prop in JSON){
+      if(JSON.hasOwnProperty(prop)){
+        var obj_id = JSON[prop].id;
+        if(obj_id === undefined){
+          throw new Error("parseJSONObjectsAsModelObjects(): each object in the response " +
+                          "must have an id property");
+        }
+        parsed_ids[obj_id] = true; // save the ID for later
+
+        if(model_ref.objects[obj_id] !== undefined){ // object exists, update it
+          model_ref.objects[obj_id].setData(JSON[prop]);
+        }else{ // object doesn't exist, create it and add to the hash
+          model_ref.add(new model_ref.type(JSON[prop]));
+        }
+      }
+    }
+    // finally, remove all objects of this model that were not in JSON:
+    for(prop in model_ref.objects){
+      if(model_ref.objects.hasOwnProperty(prop) && 
+         !parsed_ids.hasOwnProperty(model_ref.objects[prop].get("id"))){
+        
+        model_ref.remove(model_ref.objects[prop]);
+      }
+    }
+  }
+
+  function getAjaxArguments(args){
+    if(args.length > 3){
+      throw new Error("getAjaxArguments(): can't take more than 3 arguments");
+    }
+
+    var url, data, callback;
+
+    for(var i=0, l=args.length; i<l;i++){
+      if(typeof args[i] === "string" && url === undefined) url = args[i];
+      else if(typeof args[i] === "object" && data === undefined) data = args[i];
+      else if(typeof args[i] === "function" && callback === undefined) callback = args[i];
+      else{
+        throw new Error("getAjaxArguments(): something wrong with the arguments. Sorry...");
+      }
+    }
+
     return {url: url, data: data, callback: callback};
   }
 
@@ -217,7 +311,16 @@ dassie.controllers = {};
 
   $.extend(
     dassie.View.prototype,
-    eventEmitter
+    eventEmitter, {
+      destroy: function(){
+        this.trigger("destroy");
+
+        this.$el.remove();
+        
+        for(prop in this)  if(this.hasOwnProperty(prop))  delete this[prop];
+        delete this;
+      }
+    }
   );
 
   //helper functions
@@ -242,4 +345,5 @@ dassie.controllers = {};
   }
 
   dassie.Model.extend = dassie.Controller.extend = dassie.View.extend = extend;
+  dassie.Collection.extend = extend;
 })(jQuery);
