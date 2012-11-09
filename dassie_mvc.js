@@ -1,8 +1,17 @@
+/*       _               _      
+ *    __| | __ _ ___ ___(_) ___ 
+ *   / _` |/ _` / __/ __| |/ _ \
+ *  | (_| | (_| \__ \__ \ |  __/
+ *   \__,_|\__,_|___/___/_|\___|
+ */
+
+
 // why dassie? cuz they're soooo cute!!! ^_^
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
-//TODO: delegate events (e.g. view collections?);
-//TODO: Model and Collection make data completely private
+//TODO: delegate events 
+//TODO: Model-template bindings
+//TODO(maybe): before/after filters
 
 dassie = {};
 dassie.views = {};
@@ -121,9 +130,9 @@ dassie.collections = {};
 
         ajax_helpers._put(this.savePath !== undefined ? this.savePath() : this.path(),
                           args.data,
-                         function(response){
-                           if(typeof args.callback === "function") args.callback(response);
-                         });
+                          function(response){
+                            if(typeof args.callback === "function") args.callback(response);
+                          });
       },
       /* Sends a request to receive new data and update the object's properties.
        * Default Rails action: #show
@@ -153,7 +162,7 @@ dassie.collections = {};
       /* Sends a request to delete the server-side representation of the model 
        * Rails action: #delete
        */
-      delete: function(data,callback){
+      "delete": function(data,callback){
         //TODO
       }
     }
@@ -233,7 +242,6 @@ dassie.collections = {};
         var self = this;
         
         ajax_helpers._get(this.path(), args.data, function(response){
-
           for(prop in response){
             if(response.hasOwnProperty(prop) && self[prop] !== undefined &&
                self[prop].is_model){
@@ -242,8 +250,8 @@ dassie.collections = {};
             }
           }
 
-          self.trigger("pull");
-          if(typeof args.callback === "function") args.callback(this);
+          self.trigger("pulled");
+          if(typeof args.callback === "function") args.callback();
         });
       }
     }
@@ -340,6 +348,9 @@ dassie.collections = {};
     F.prototype = parent.prototype;
     child.prototype = new F;
     $.extend(child.prototype,props)
+
+    // child.__super__ = parent.prototype; // used in backbone, but I think this is better:
+    child.prototype.__super__ = parent.prototype;
     
     return child;
   }
