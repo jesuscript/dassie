@@ -5,7 +5,6 @@
  *   \__,_|\__,_|___/___/_|\___|
  */
 
-
 // why dassie? cuz they're soooo cute!!! ^_^
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
@@ -349,8 +348,8 @@ dassie.collections = {};
     child.prototype = new F;
     $.extend(child.prototype,props)
 
-    // child.__super__ = parent.prototype; // used in backbone, but I think this is better:
-    child.prototype.__super__ = parent.prototype;
+    // child.__super__ = parent.prototype; // used in backbone, but I think this is better
+    child.prototype.__super__ = parent.prototype; // for calling super methods from objects
     
     return child;
   }
@@ -358,3 +357,29 @@ dassie.collections = {};
   dassie.Model.extend = dassie.Controller.extend = dassie.View.extend = extend;
   dassie.Collection.extend = extend;
 })(jQuery);
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+ * +------------------+
+ * |sn3bo             |
+ * |p++n              |
+ * |-j1               |
+ * |=?                |
+ * |1          #  ##  |
+ * |           # #    |
+ * |           #  ##  |
+ * |        #  #    # |
+ * |         ##   ##  |
+ * +------------------+
+ * jsstyle.github.com 
+*/
