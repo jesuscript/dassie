@@ -5,44 +5,54 @@
  *   \__,_|\__,_|___/___/_|\___|
  */
 
-// why dassie? cuz they're soooo cute!!! ^_^
+// why dassie? cuz they're cute! (͡° ͜ʖ͡°)
 // http://www.youtube.com/watch?v=-svEVVyCM-0&feature=related
 
-//TODO: delegate events 
-//TODO: Model-template bindings
-//TODO(maybe): before/after filters
+
+// TODO: Custom event delegation on views
+// TODO: Two-way data bindings similar to Ember/Knockout
+
+
+
+
+
+// here be dragons...
+
+
+
 
 dassie = {};
 dassie.views = {};
 dassie.models = {};
 dassie.controllers = {};
 dassie.collections = {};
+dassie.extensions = {};
 
 (function($){
   var global = this;
 
   var eventEmitter = {
     initEventEmitter: function(){
-      this._eH = {}; //events handler
+      this._e_h = {}; //events handler
     },
     bind: function(event, callback){
-      if(this._eH[event] === undefined){
-        this._eH[event] = [];
+      if(this._e_h[event] === undefined){
+        this._e_h[event] = [];
       }
-      this._eH[event].push(callback);
+      this._e_h[event].push(callback);
     },
     trigger: function(event,data){
-      if(this._eH[event] !== undefined){
-        for(var i=0, l = this._eH[event].length; i < l; i++){
-          this._eH[event][i](data);
+      if(this._e_h[event] !== undefined){
+        for(var i=0, l = this._e_h[event].length; i < l; i++){
+          this._e_h[event][i](data);
         }
       }
     },
     unbindAll: function(){
-      this._eH = {};
+      this._e_h = {};
     }
   };
-
+  
   var ajax_helpers = {
     //TODO: add error callbacks too?
     _get: function(url,data,callback){
@@ -78,7 +88,8 @@ dassie.collections = {};
       });
     }
   }
-  // TODO: make data _completely_ private and add .get() and .set() methods
+
+
   dassie.Model = function(data){
     this.initEventEmitter();
 
@@ -90,6 +101,7 @@ dassie.collections = {};
 
     if(this.construct !== undefined) this.construct.apply(this,arguments);
   }
+  
   $.extend(
     dassie.Model.prototype,
     eventEmitter,
@@ -114,31 +126,41 @@ dassie.collections = {};
       },
       destroy: function(){
         this.trigger("destroy");
-        for(prop in this)  if(this.hasOwnProperty(prop))  delete this[prop];
+
+        for(prop in this){ // include prototype properties
+          delete this[prop];
+        }
         delete this;
       },
 
       /* Sends a request to update the server-side representation of the model 
        * and load model's properties to update the object's data
-       * Default Rails action: #update
+       * Rails action: #update
        */
-      // asynchronous synchronisation lol
-      save: function(){ 
+      save: function(){
+        if(typeof this.save_name !== "string"){
+          throw new Error("save(): save_name needs to be a string. Got: " +
+                          typeof this.save_name + ". What else did you expect? ");
+        }
+        
         var self = this;
-        var args = getAjaxArguments.call(this,arguments);
+        var args = getAjaxArguments.call(this,arguments); // yes, it's a call, not apply
+        var data = {};
+        data[this.save_name] = this.data;
+        if(typeof args.data === "object") $.merge(data, args.data);
 
         ajax_helpers._put(this.savePath !== undefined ? this.savePath() : this.path(),
-                          args.data,
+                          data,
                           function(response){
                             if(typeof args.callback === "function") args.callback(response);
                           });
       },
       /* Sends a request to receive new data and update the object's properties.
-       * Default Rails action: #show
+       * Rails action: #show
        */
       load: function(){ 
         var self = this;
-        var args = getAjaxArguments.call(this,arguments);
+        var args = getAjaxArguments.call(this,arguments); // yes, it's a call, not apply
         
         ajax_helpers._get(this.loadPath !== undefined ? this.loadPath() : this.path(), 
                           args.data, 
@@ -147,21 +169,31 @@ dassie.collections = {};
                             if(typeof args.callback === "function") args.callback(response);
                           });
       },
-      /* lower-level synchronisation function. it's preferable to use sync and load instead 
-       * of this one*/
-      request: function(path,data,callback, set_data){
-      },
-
       /* Sends a request to create a new server-side representation of the model 
        * Rails action: #create
        */
-      saveNew: function(data,callback){
-        //TODO
+      saveNew: function(){
+        if(typeof this.save_name !== "string"){
+          throw new Error("save(): save_name needs to be a string. Got: " +
+                          typeof this.save_name + ". What else did you expect? ");
+        }
+
+        var self = this;
+
+        var args = getAjaxArguments.call(this,arguments); // yes, it's a call, not apply
+        var data = {};
+        data[this.save_name] = this.data;
+        if(typeof args.data === "object") $.merge(data, args.data);
+
+        ajax_helpers._post(this.saveNewPath(), data, function(response){
+
+          if(typeof args.callback === "function") args.callback(response);
+        });
       },
       /* Sends a request to delete the server-side representation of the model 
        * Rails action: #delete
        */
-      "delete": function(data,callback){
+      "delete": function(){
         //TODO
       }
     }
@@ -181,8 +213,8 @@ dassie.collections = {};
         this[model] = $.extend({}, eventEmitter, modelFunctions);
         this[model].initEventEmitter();
 
-        this[model].type = this.models[model]; // TODO: private
-        this[model].objects = {}; //TODO: private
+        this[model].type = this.models[model]; 
+        this[model].objects = {}; 
       }
     }
     delete this.models;
@@ -225,7 +257,6 @@ dassie.collections = {};
     is_model: true
   }
 
-  // TODO: make models and data _completely_ private
   $.extend(
     dassie.Collection.prototype,
     eventEmitter,
@@ -262,16 +293,14 @@ dassie.collections = {};
     for(prop in JSON){
       if(JSON.hasOwnProperty(prop)){
         var obj_id = JSON[prop].id;
-        if(obj_id === undefined){
-          throw new Error("parseJSONObjectsAsModelObjects(): each object in the response " +
-                          "must have an id property");
-        }
-        parsed_ids[obj_id] = true; // save the ID for later
+        if(obj_id !== undefined && obj_id !== null){
+          parsed_ids[obj_id] = true; // save the ID for later
 
-        if(model_ref.objects[obj_id] !== undefined){ // object exists, update it
-          model_ref.objects[obj_id].setData(JSON[prop]);
-        }else{ // object doesn't exist, create it and add to the hash
-          model_ref.add(new model_ref.type(JSON[prop]));
+          if(model_ref.objects[obj_id] !== undefined){ // object exists, update it
+            model_ref.objects[obj_id].setData(JSON[prop]);
+          }else{ // object doesn't exist, create it and add to the hash
+            model_ref.add(new model_ref.type(JSON[prop]));
+          }
         }
       }
     }
@@ -309,10 +338,14 @@ dassie.collections = {};
   }
 
   dassie.View = function(opts){
+    
     if(opts === undefined) opts = {};
     $.extend(this, opts);
+
     this.initEventEmitter();
+
     if(this.construct !== undefined) this.construct.apply(this,arguments);
+
     //TODO (maybe, when dassie is cool enough :): this.delegateEvents();
   }
 
@@ -323,15 +356,16 @@ dassie.collections = {};
         this.trigger("destroy");
 
         this.$el.remove();
-        
-        for(prop in this)  if(this.hasOwnProperty(prop))  delete this[prop];
+
+        for(prop in this){    // include prototype properties
+          delete this[prop];
+        }    
         delete this;
       }
     }
   );
 
-  //helper functions
-
+  
   var extend =  function(props,static_props){
     var parent = this;
     var child;
@@ -348,38 +382,12 @@ dassie.collections = {};
     child.prototype = new F;
     $.extend(child.prototype,props)
 
-    // child.__super__ = parent.prototype; // used in backbone, but I think this is better
-    child.prototype.__super__ = parent.prototype; // for calling super methods from objects
-    
+    child.__super__ = parent.prototype;
+    child.prototype.__super__ = parent.prototype; //unfortunately there's a problem with this
+
     return child;
   }
 
   dassie.Model.extend = dassie.Controller.extend = dassie.View.extend = extend;
   dassie.Collection.extend = extend;
 })(jQuery);
-
-
-
-
-
-
-
-
-
-
-
-
-/*
- * +------------------+
- * |sn3bo             |
- * |p++n              |
- * |-j1               |
- * |=?                |
- * |1          #  ##  |
- * |           # #    |
- * |           #  ##  |
- * |        #  #    # |
- * |         ##   ##  |
- * +------------------+
- * jsstyle.github.com 
-*/
